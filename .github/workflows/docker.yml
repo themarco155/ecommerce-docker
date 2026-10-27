@@ -1,0 +1,71 @@
+# Construye las 3 imágenes, levanta el ecosistema con docker compose
+# y prueba que todo responda. Corre en cada push a GitHub (no necesitas Docker local).
+name: Docker · build y prueba del ecosistema
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Crear .env de prueba (claves aleatorias)
+        run: |
+          cp .env.example .env
+          sed -i "s|^APP_KEY=.*|APP_KEY=base64:$(openssl rand -base64 32)|" .env
+          sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -hex 32)|" .env
+          sed -i "s|^DB_PASSWORD=.*|DB_PASSWORD=$(openssl rand -hex 12)|" .env
+          sed -i "s|^DB_ROOT_PASSWORD=.*|DB_ROOT_PASSWORD=$(openssl rand -hex 12)|" .env
+
+      - name: Construir imágenes (multi-stage)
+        run: docker compose build
+
+      - name: Levantar el ecosistema y esperar a que esté sano
+        run: docker compose up -d --wait --wait-timeout 300
+
+      - name: Probar los servicios
+        run: |
+          set -e
+          echo "== Salud de Laravel";      curl -fsS http://localhost:8000/up > /dev/null
+          echo "== Catálogo (API)";        curl -fsS http://localhost:8000/api/products | head -c 200; echo
+          echo "== Swagger";               curl -fsS -o /dev/null http://localhost:8000/api/documentation
+          echo "== Login (API)"
+          TOKEN=$(curl -fsS -X POST http://localhost:8000/api/login \
+                    -H "Content-Type: application/json" -H "Accept: application/json" \
+                    -d '{"email":"cliente@example.com","password":"password123"}' \
+                  | python3 -c "import sys,json;print(json.load(sys.stdin)['data']['authorization']['token'])")
+          echo "== Historial protegido";   curl -fsS http://localhost:8000/api/orders -H "Authorization: Bearer $TOKEN" -H "Accept: application/json" > /dev/null
+          echo "== Frontend (catálogo)";   curl -fsS http://localhost:3000/products | grep -q "Audífonos"
+          echo "== .env bloqueado";        test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/.env)" = "403"
+          echo "== MySQL no expuesto"
+          if nc -z localhost 3306; then echo "ERROR: el 3306 está publicado"; exit 1; fi
+          echo "== Usuarios sin root"
+          test "$(docker compose exec -T backend whoami)" = "www-data"
+          test "$(docker compose exec -T frontend whoami)" = "nextjs"
+          echo "Todo OK"
+
+      - name: Resumen (tamaño de imágenes y estado)
+        if: always()
+        run: |
+          {
+            echo "## Imágenes"
+            echo '```'
+            docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E "REPOSITORY|ecommerce|mysql"
+            echo '```'
+            echo "## Servicios"
+            echo '```'
+            docker compose ps --format 'table {{.Service}}\t{{.Status}}\t{{.Ports}}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Logs (si algo falló)
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Apagar
+        if: always()
+        run: docker compose down -v

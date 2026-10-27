@@ -1,5 +1,7 @@
 # E-commerce en contenedores · Next.js + Laravel + MySQL
 
+[![Docker · build y prueba del ecosistema](https://github.com/themarco155/ecommerce-docker/actions/workflows/docker.yml/badge.svg)](https://github.com/themarco155/ecommerce-docker/actions/workflows/docker.yml)
+
 Entorno de **producción con Docker** para el e-commerce del bootcamp:
 
 - **Frontend:** tienda en Next.js 16 (App Router).
@@ -216,6 +218,25 @@ docker compose exec frontend whoami    # → nextjs   (no es root)
 - **`restart: unless-stopped`** en los tres servicios.
 - **`security_opt: no-new-privileges`** en todos y **`cap_drop: ALL`** en frontend y backend, que no necesitan ningún permiso especial del kernel.
 - **Imágenes con nombre y versión** (`ecommerce-frontend:1.0`, `ecommerce-backend:1.0`) para poder publicarlas en un registro y desplegarlas igual en cualquier entorno.
+
+---
+
+## Prueba automática (GitHub Actions)
+
+`.github/workflows/docker.yml` corre en cada `push`:
+
+1. Crea un `.env` con claves aleatorias.
+2. Construye las imágenes.
+3. Levanta todo con `docker compose up --wait`, que espera a que los 3 servicios estén sanos.
+4. Prueba:
+   - la salud de Laravel;
+   - el catálogo, Swagger, el login y el historial protegido de la API;
+   - el catálogo del frontend;
+   - que `.env` devuelva 403;
+   - que MySQL no esté publicado;
+   - que los contenedores corran sin root.
+
+El **resumen** de cada ejecución (pestaña *Actions*) muestra el tamaño final de cada imagen y el estado de los servicios. Así cualquier persona puede comprobar que el ecosistema se construye y funciona en un entorno limpio, sin depender de una máquina en particular.
 
 ---
 
