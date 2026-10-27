@@ -1,0 +1,9 @@
+# Secretos
+.env
+# Dependencias y builds locales
+node_modules/
+frontend/.next/
+backend/vendor/
+# Sistema
+.DS_Store
+Thumbs.db

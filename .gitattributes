@@ -1,0 +1,7 @@
+# Finales de línea LF en todo el repo: los scripts .sh y configs que van
+# dentro de los contenedores Linux fallan si llegan con CRLF desde Windows.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary
